@@ -9,6 +9,8 @@
 
 ### Fixed
 ### Removed
+- Range Inclusive no longer implments Copy, causing the Copy trait to be removed for the Error type
+
 ### Deprecated
 
 ## [v0.1.4]
