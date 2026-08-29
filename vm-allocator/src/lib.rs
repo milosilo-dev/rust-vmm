@@ -29,7 +29,7 @@
 //!     slots: HashMap<u32, RangeInclusive>,
 //! }
 //!
-//! #[derive(Clone, Copy)]
+//! #[derive(Clone)]
 //! struct DeviceSlot {
 //!     id: u32,
 //!     mmio_range: RangeInclusive,
@@ -54,7 +54,7 @@
 //!             id: self.id_allocator.allocate_id()?,
 //!             mmio_range,
 //!         };
-//!         self.slots.insert(slot.id, slot.mmio_range);
+//!         self.slots.insert(slot.id, slot.mmio_range.clone());
 //!         Ok(slot)
 //!     }
 //!
@@ -96,7 +96,7 @@ pub use crate::{address_allocator::AddressAllocator, id_allocator::IdAllocator};
 pub const DEFAULT_CONSTRAINT_ALIGN: u64 = 4;
 
 /// Error type for IdAllocator usage.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Error)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Error)]
 pub enum Error {
     /// Management operations on desired resource resulted in overflow.
     #[error("Management operations on desired resource resulted in overflow.")]
@@ -163,13 +163,33 @@ pub type Result<T> = result::Result<T, Error>;
 /// assert!(r.overlaps(&other));
 /// ```
 // This structure represents the key of the Node object in the interval tree implementation.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Hash, Ord, Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RangeInclusive {
-    /// Lower boundary of the interval.
-    start: u64,
-    /// Upper boundary of the interval.
-    end: u64,
+    inner: std::ops::RangeInclusive<u64>,
+}
+
+impl PartialEq for RangeInclusive {
+    fn eq(&self, other: &Self) -> bool {
+        other.inner.start() == self.inner.start() && other.inner.end() == self.inner.end()
+    }
+}
+
+impl Eq for RangeInclusive {}
+
+impl PartialOrd for RangeInclusive {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for RangeInclusive {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.inner
+            .start()
+            .cmp(other.inner.start())
+            .then_with(|| self.inner.end().cmp(other.inner.end()))
+    }
 }
 
 #[allow(clippy::len_without_is_empty)]
@@ -182,32 +202,32 @@ impl RangeInclusive {
         if start > end || (start == 0 && end == u64::MAX) {
             return Err(Error::InvalidRange(start, end));
         }
-        Ok(RangeInclusive { start, end })
+        Ok(RangeInclusive { inner: start..=end })
     }
 
     /// Returns the length of the range.
     pub fn len(&self) -> u64 {
-        self.end - self.start + 1
+        self.inner.end() - self.inner.start() + 1
     }
 
     /// Returns true if the regions overlap.
     pub fn overlaps(&self, other: &RangeInclusive) -> bool {
-        max(self.start, other.start) <= min(self.end, other.end)
+        max(self.inner.start(), other.inner.start()) <= min(self.inner.end(), other.inner.end())
     }
 
     /// Returns true if the current range contains the range passed as a parameter.
     pub fn contains(&self, other: &RangeInclusive) -> bool {
-        self.start <= other.start && self.end >= other.end
+        self.inner.start() <= other.inner.start() && self.inner.end() >= other.inner.end()
     }
 
     /// Returns the lower boundary of the range.
     pub fn start(&self) -> u64 {
-        self.start
+        *self.inner.start()
     }
 
     /// Returns the upper boundary of the range.
     pub fn end(&self) -> u64 {
-        self.end
+        *self.inner.end()
     }
 }
 
